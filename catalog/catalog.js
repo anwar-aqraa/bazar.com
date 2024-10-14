@@ -58,10 +58,11 @@ app.post('/update/:item_number', (req, res) => {
             res.status(500).send('Error updating book');
         } else {
             console.log(`Book with ID ${item_number} updated. `);  // Log the update
-            res.send('Book updated successfully');
+            res.send(`Book updated successfully. New stock is now ${stock}`);
         }
     });
 });
+
 
 app.listen(PORT, () => {
     console.log(`Catalog service running on port ${PORT}`);
