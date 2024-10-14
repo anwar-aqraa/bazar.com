@@ -1,3 +1,5 @@
+// order/order.js
+
 const express = require('express');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
@@ -21,7 +23,7 @@ app.post('/purchase/:item_number', async (req, res) => {
 
     try {
         // Check stock from catalog service
-        const response = await axios.get(`http://localhost:3001/info/${item_number}`);
+        const response = await axios.get(`http://catalog-server:3001/info/${item_number}`);
         const book = response.data;
 
         // Debugging: Log the book details received from the catalog
@@ -36,7 +38,7 @@ app.post('/purchase/:item_number', async (req, res) => {
         if (book.stock > 0) {
             // Update stock in the catalog
             const updatedStock = book.stock - 1;
-            const updateResponse = await axios.post(`http://localhost:3001/update/${item_number}`, { stock: updatedStock, price: book.price });
+            const updateResponse = await axios.post(`http://catalog-server:3001/update/${item_number}`, { stock: updatedStock, price: book.price });
 
             // Debugging: Log the response from the catalog update
             console.log('Catalog update response:', updateResponse.data);

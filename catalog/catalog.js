@@ -1,3 +1,5 @@
+// catalog/catalog.js
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
@@ -33,7 +35,6 @@ app.get('/search/:topic', (req, res) => {
 });
 
 // Get book info by item number
-
 app.get('/info/:item_number', (req, res) => {
     const { item_number } = req.params;
     db.get("SELECT title, stock, price,topic FROM books WHERE id = ?", [item_number], (err, row) => {

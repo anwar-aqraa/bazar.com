@@ -1,10 +1,12 @@
 {
   "name": "bazar.com",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start-catalog": "nodemon -L catalog/catalog.js",    
+    "start-order": "nodemon -L order/order.js",          
+    "start-client": "nodemon -L frontend/client.js"       
   },
   "keywords": [],
   "author": "",
@@ -12,6 +14,9 @@
   "dependencies": {
     "axios": "^1.7.7",
     "express": "^4.21.1",
-    "sqlite3": "^5.1.7"
-  }
+    "sqlite3": "^5.1.7",
+    "nodemon": "^3.0.1"  
+  },
+  "description": ""
+
 }
