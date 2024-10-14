@@ -21,6 +21,7 @@ db.serialize(() => {
 app.post('/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
 
+   
     try {
         // Check stock from catalog service
         const response = await axios.get(`http://catalog-server:3001/info/${item_number}`);
@@ -30,8 +31,9 @@ app.post('/purchase/:item_number', async (req, res) => {
         console.log('Book details:', book);
 
         // If the book doesn't exist or has no stock info
+        
         if (!book || !book.stock) {
-            return res.status(404).send('Book not found'); // Handle book not found case
+            return res.status(404).send('Book not found!!'); // Handle book not found case
         }
 
         // If the book is in stock
