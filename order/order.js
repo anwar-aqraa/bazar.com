@@ -52,9 +52,10 @@ app.post('/purchase/:item_number', async (req, res) => {
                     return res.send(`Book purchased: ${book.title}`);
                 }
             });
-        } else {
+        } 
+        else {
             // If the book is out of stock
-            return res.status(400).send('Book out of stock');
+            return res.status(400).send('Book out of stock!!');
         }
     } catch (error) {
         // Log detailed error information
