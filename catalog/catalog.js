@@ -51,8 +51,8 @@ app.get('/info/:item_number', (req, res) => {
 // Update book stock
 app.post('/update/:item_number', (req, res) => {
     const { item_number } = req.params;
-    const { stock, price } = req.body;
-    db.run("UPDATE books SET stock = ?, price = ? WHERE id = ?", [stock, price, item_number], function(err) {
+    const { stock} = req.body;
+    db.run("UPDATE books SET stock = ? WHERE id = ?", [stock,  item_number], function(err) {
         if (err) {
             console.error('Error updating book:', err);
             res.status(500).send('Error updating book');
