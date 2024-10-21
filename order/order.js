@@ -66,7 +66,7 @@ app.post('/purchase/:item_number', async (req, res) => {
         } else {
             // If the book is out of stock
             console.log(`Purchase failed: Book "${book.title}" is out of stock.`);
-            return res.status(400).send(`Purchase failed: Book "${book.title}" is out of stock!`);
+            return res.send(`Purchase failed: Book "${book.title}" is out of stock!`);
         }
     } catch (error) {
         // Log detailed error information
