@@ -43,6 +43,9 @@ app.get('/search/:topic', async (req, res) => {
         const response = await axios.get(`${catalogServers[catalogIndex]}/search/${topic}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
+        // طباعة أن البيانات جاءت من قاعدة البيانات
+        console.log('Retrieved from database');
+        
         // تخزين البيانات في الذاكرة المؤقتة
         await client.set(topic, JSON.stringify(response.data), 'EX', 300); // Expiration 5 minutes
         res.json(response.data);
@@ -52,20 +55,24 @@ app.get('/search/:topic', async (req, res) => {
     }
 });
 
-// Get book info
 app.get('/info/:item_number', async (req, res) => {
     const { item_number } = req.params;
     
     try {
+        // التحقق من الذاكرة المؤقتة
         const cachedData = await client.get(item_number);
         if (cachedData) {
             console.log('Retrieved from cache');
             return res.json(JSON.parse(cachedData));
         }
 
+        // طلب البيانات من خدمة الكتالوج
         const response = await axios.get(`${catalogServers[catalogIndex]}/info/${item_number}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
+        // طباعة أن البيانات جاءت من قاعدة البيانات
+        console.log('Retrieved from database');
+        
         await client.set(item_number, JSON.stringify(response.data), 'EX', 300);
         res.json(response.data);
     } catch (error) {
@@ -73,6 +80,7 @@ app.get('/info/:item_number', async (req, res) => {
         res.status(500).send('Error fetching item info');
     }
 });
+
 
 // Purchase a book with synchronization
 app.post('/purchase/:item_number', async (req, res) => {
