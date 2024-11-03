@@ -1,3 +1,5 @@
+// Order Server - order.js
+
 const express = require('express');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
@@ -47,6 +49,15 @@ app.post('/purchase/:item_number', async (req, res) => {
         console.error('Error during purchase:', error.message);
         res.status(500).send('Error processing purchase');
     }
+});
+
+// Synchronization endpoint for replicas
+app.post('/sync/:item_number', (req, res) => {
+    const { item_number } = req.params;
+
+    // Implement any internal logic needed to sync replicas here
+    console.log(`Synchronization request received for item: ${item_number}`);
+    res.send(`Synchronized successfully for item ${item_number}`);
 });
 
 app.listen(PORT, () => {

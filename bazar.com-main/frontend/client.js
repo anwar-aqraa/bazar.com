@@ -1,3 +1,5 @@
+// Frontend Server - client.js
+
 const express = require('express');
 const axios = require('axios');
 const redis = require('redis');
@@ -5,10 +7,16 @@ const util = require("util");
 const app = express();
 const PORT = 3000; // منفذ واجهة المستخدم
 
-// إعداد Redis كذاكرة مؤقتة
-const client = redis.createClient(6379, "redis");
+// إعداد Redis كذاكرة مؤقتة مع سياسة استبدال LRU
+const client = redis.createClient({
+    host: "redis",
+    port: 6379,
+    maxmemory: "100mb", // حدد حجم الذاكرة القصوى للتخزين المؤقت
+    maxmemory_policy: "allkeys-lru" // تطبيق سياسة LRU لاستبدال البيانات
+});
 client.get = util.promisify(client.get);
 client.set = util.promisify(client.set);
+client.del = util.promisify(client.del);
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -66,17 +74,21 @@ app.get('/info/:item_number', async (req, res) => {
     }
 });
 
-// Purchase a book
+// Purchase a book with synchronization
 app.post('/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
     try {
+        // اختيار خادم الطلبات بناءً على Round-Robin
         const response = await axios.post(`${orderServers[orderIndex]}/purchase/${item_number}`);
         orderIndex = (orderIndex + 1) % orderServers.length;
 
         // إبطال البيانات من الذاكرة المؤقتة للتأكد من التناسق
         await client.del(item_number);
 
-        console.log(`Purchase processed for item: ${item_number}`);
+        // إرسال التحديثات لجميع النسخ المكررة
+        await Promise.all(orderServers.map(server => axios.post(`${server}/sync/${item_number}`)));
+
+        console.log(`Purchase processed and synchronized for item: ${item_number}`);
         res.json(response.data);
     } catch (error) {
         console.error(`Error processing purchase for item number "${item_number}":`, error.message);

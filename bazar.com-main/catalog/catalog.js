@@ -1,5 +1,8 @@
+// Catalog Server - catalog.js
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+const axios = require('axios');
 const app = express();
 const PORT = 3001; // منفذ خدمة الكتالوج
 
@@ -47,7 +50,7 @@ app.get('/info/:item_number', (req, res) => {
 });
 
 // Update book stock
-app.post('/update/:item_number', (req, res) => {
+app.post('/update/:item_number', async (req, res) => {
     const { item_number } = req.params;
     const { stock } = req.body;
 
@@ -58,16 +61,39 @@ app.post('/update/:item_number', (req, res) => {
         } else {
             console.log(`Book with ID ${item_number} updated to stock ${stock}`);
             res.send(`Book updated successfully. New stock is now ${stock}`);
+
+            // إرسال طلب تزامن لجميع النسخ المكررة لضمان توافق البيانات
+            const catalogServers = ["http://catalog-server1:3001", "http://catalog-server2:3001"];
+            catalogServers.forEach(server => {
+                if (server !== `http://localhost:${PORT}`) { // تجنب إرسال التحديث لنفس الخادم
+                    axios.post(`${server}/sync/${item_number}`, { stock })
+                        .then(() => console.log(`Synchronized with ${server}`))
+                        .catch(err => console.error(`Error synchronizing with ${server}:`, err.message));
+                }
+            });
         }
     });
 });
 
-// Invalidate cache for a specific item
-app.post('/invalidate-cache/:item_number', (req, res) => {
+// Synchronization endpoint for replicas
+app.post('/sync/:item_number', (req, res) => {
     const { item_number } = req.params;
-    console.log(`Invalidating cache for item: ${item_number}`);
-   
-    res.send(`Cache invalidated for item ${item_number}`);
+    const { stock } = req.body;
+
+    db.run("UPDATE books SET stock = ? WHERE id = ?", [stock, item_number], function(err) {
+        if (err) {
+            console.error('Error updating book in synchronization:', err);
+            res.status(500).send('Error updating book in synchronization');
+        } else {
+            console.log(`Synchronized stock for book with ID ${item_number} to ${stock}`);
+            res.send(`Synchronized successfully for item ${item_number}`);
+
+            // إبطال البيانات المؤقتة من الذاكرة المؤقتة لضمان التوافق
+            axios.post(`http://frontend-service/invalidate-cache/${item_number}`)
+                .then(() => console.log(`Cache invalidated for item ${item_number}`))
+                .catch(err => console.error(`Error invalidating cache for item ${item_number}:`, err.message));
+        }
+    });
 });
 
 app.listen(PORT, () => {
