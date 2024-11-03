@@ -43,7 +43,7 @@ app.get('/info/:item_number', (req, res) => {
             console.error('Error fetching book info:', err);
             res.status(500).send('Error fetching book info');
         } else {
-            // طباعة بيانات الكتاب التي تم استرجاعها
+            
             console.log(`Retrieved book info from database: ${row.title}`);
             res.json(row);
         }
