@@ -52,6 +52,7 @@ app.post('/purchase/:item_number', async (req, res) => {
 });
 
 // Synchronization endpoint for replicas
+
 app.post('/sync/:item_number', (req, res) => {
     const { item_number } = req.params;
 
