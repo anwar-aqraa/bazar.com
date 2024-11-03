@@ -7,7 +7,6 @@ const util = require("util");
 const app = express();
 const PORT = 3000; // منفذ واجهة المستخدم
 
-
 const client = redis.createClient({
     host: "redis",
     port: 6379,
@@ -21,29 +20,26 @@ client.del = util.promisify(client.del);
 // Middleware to parse JSON requests
 app.use(express.json());
 
-
 let catalogIndex = 0;
 let orderIndex = 0;
-const catalogServers = ["http://catalog-server1:3001", "http://catalog-server2:3001"];
-const orderServers = ["http://order-server1:3002", "http://order-server2:3002"];
+const catalogServers = ["http://catalog-server1:3001", "http://catalog-server-replica:3009"]; // تعديل هنا
+const orderServers = ["http://order-server1:3002", "http://order-server-replica:3008"];
+
 
 // Search books by topic
 app.get('/search/:topic', async (req, res) => {
     const { topic } = req.params;
     
     try {
-      
         const cachedData = await client.get(topic);
         if (cachedData) {
             console.log('Retrieved from cache');
             return res.json(JSON.parse(cachedData));
         }
 
-    
         const response = await axios.get(`${catalogServers[catalogIndex]}/search/${topic}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
-        
         console.log('Retrieved from database');
         
         // تخزين البيانات في الذاكرة المؤقتة
@@ -59,7 +55,6 @@ app.get('/info/:item_number', async (req, res) => {
     const { item_number } = req.params;
     
     try {
-       
         const cachedData = await client.get(item_number);
         if (cachedData) {
             console.log('Retrieved from cache');
@@ -77,11 +72,9 @@ app.get('/info/:item_number', async (req, res) => {
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching info for item number "${item_number}":`, error.message);
-
         res.status(500).send('Error fetching item info');
     }
 });
-
 
 // Purchase a book with synchronization
 app.post('/purchase/:item_number', async (req, res) => {

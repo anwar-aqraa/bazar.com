@@ -14,13 +14,30 @@ services:
     environment:
       - NODE_ENV=production
     deploy:
-     
       update_config:
-       
         delay: 10s
       endpoint_mode: dnsrr
     ports:
       - "3001:3001"
+
+  catalog-server-replica:
+    image: catalog-service
+    build:
+      context: .  
+      dockerfile: Dockerfile
+      target: catalog  
+    volumes:
+      - ./catalog:/app/catalog:ro  
+      - ./nginx:/app/nginx:ro 
+      - ./catalog/database.db:/app/database.db:rw 
+    environment:
+      - NODE_ENV=production
+    deploy:
+      update_config:
+        delay: 10s
+      endpoint_mode: dnsrr
+    ports:
+      - "3009:3001"  # استخدام منفذ مختلف للنسخة المكررة
 
   order-server:
     image: order-service
@@ -34,7 +51,6 @@ services:
     environment:
       - NODE_ENV=production
     deploy:
-    
       update_config:
         delay: 10s
       endpoint_mode: dnsrr
@@ -42,6 +58,26 @@ services:
       - catalog-server
     ports:
       - "3002:3002"
+
+  order-server-replica:
+    image: order-service
+    build:
+      context: .  
+      dockerfile: Dockerfile
+      target: order  
+    volumes:
+      - ./order:/app/order:ro  
+      - ./nginx:/app/nginx:ro  
+    environment:
+      - NODE_ENV=production
+    deploy:
+      update_config:
+        delay: 10s
+      endpoint_mode: dnsrr
+    depends_on:
+      - catalog-server
+    ports:
+      - "3008:3002"  # استخدام منفذ مختلف للنسخة المكررة
 
   client:
     image: client-service
@@ -52,14 +88,14 @@ services:
     volumes:
       - ./frontend:/app/frontend:ro  
     deploy:
-    
       update_config:
-        
         delay: 10s
       endpoint_mode: dnsrr
     depends_on:
       - catalog-server
       - order-server
+      - catalog-server-replica
+      - order-server-replica
     ports:
       - "3000:3000"
 
