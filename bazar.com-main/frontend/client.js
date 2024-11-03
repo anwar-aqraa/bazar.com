@@ -59,7 +59,7 @@ app.get('/info/:item_number', async (req, res) => {
     const { item_number } = req.params;
     
     try {
-        // التحقق من الذاكرة المؤقتة
+       
         const cachedData = await client.get(item_number);
         if (cachedData) {
             console.log('Retrieved from cache');
