@@ -77,7 +77,7 @@ app.get('/info/:item_number', async (req, res) => {
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching info for item number "${item_number}":`, error.message);
-        
+
         res.status(500).send('Error fetching item info');
     }
 });
@@ -89,6 +89,7 @@ app.post('/purchase/:item_number', async (req, res) => {
     try {
         // اختيار خادم الطلبات بناءً على Round-Robin
         const response = await axios.post(`${orderServers[orderIndex]}/purchase/${item_number}`);
+       
         orderIndex = (orderIndex + 1) % orderServers.length;
 
         // إبطال البيانات من الذاكرة المؤقتة للتأكد من التناسق
