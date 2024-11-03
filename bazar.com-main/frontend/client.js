@@ -80,15 +80,15 @@ app.get('/info/:item_number', async (req, res) => {
 app.post('/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
     try {
-        // اختيار خادم الطلبات بناءً على Round-Robin
+        // Choose the order server based on Round-Robin
         const response = await axios.post(`${orderServers[orderIndex]}/purchase/${item_number}`);
        
         orderIndex = (orderIndex + 1) % orderServers.length;
 
-        // إبطال البيانات من الذاكرة المؤقتة للتأكد من التناسق
+        // Invalidate cache to ensure consistency
         await client.del(item_number);
 
-        // إرسال التحديثات لجميع النسخ المكررة
+        // Send updates to all replicas
         await Promise.all(orderServers.map(server => axios.post(`${server}/sync/${item_number}`)));
 
         console.log(`Purchase processed and synchronized for item: ${item_number}`);
@@ -98,6 +98,7 @@ app.post('/purchase/:item_number', async (req, res) => {
         res.status(500).send('Error processing purchase');
     }
 });
+
 
 app.listen(PORT, () => {
     console.log(`Frontend service running on port ${PORT}`);

@@ -17,6 +17,7 @@ const db = new sqlite3.Database('./orders.db', (err) => {
 });
 
 // Purchase endpoint
+// Purchase endpoint
 app.post('/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
 
@@ -44,6 +45,9 @@ app.post('/purchase/:item_number', async (req, res) => {
                 return res.status(500).send('Error logging the order');
             } else {
                 console.log(`Order processed successfully for item ${item_number}. Stock updated to ${updatedStock}`);
+                // Implicit synchronization
+                axios.post(`http://order-server-replica:3008/sync/${item_number}`);
+                console.log(`Implicit synchronization done for item ${item_number}`);
                 res.send(`Book purchased successfully: ${book.title}`);
             }
         });
@@ -54,14 +58,19 @@ app.post('/purchase/:item_number', async (req, res) => {
 });
 
 // Synchronization endpoint for replicas
+// Synchronization endpoint for replicas
 app.post('/sync/:item_number', (req, res) => {
     const { item_number } = req.params;
 
     // Implement any internal logic needed to sync replicas here
     console.log(`Synchronization request received for item: ${item_number}`);
+    // Message for successful synchronization
+    console.log(`Synchronized successfully for item ${item_number}`);
     res.send(`Synchronized successfully for item ${item_number}`);
 });
 
+
+// New purchase endpoint for order-replica
 // New purchase endpoint for order-replica
 app.post('/order-replica/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
@@ -71,7 +80,6 @@ app.post('/order-replica/purchase/:item_number', async (req, res) => {
         await axios.post(`http://catalog-server:3001/invalidate-cache/${item_number}`);
         console.log(`Cache invalidated for item ${item_number} on order-replica`);
 
-        // You can call the same purchase logic here if needed
         const response = await axios.get(`http://catalog-server:3001/info/${item_number}`);
         const book = response.data;
 
@@ -89,6 +97,9 @@ app.post('/order-replica/purchase/:item_number', async (req, res) => {
                 return res.status(500).send('Error logging the order');
             } else {
                 console.log(`Order processed successfully for item ${item_number} on order-replica. Stock updated to ${updatedStock}`);
+                // Implicit synchronization
+                axios.post(`http://catalog-server:3001/sync/${item_number}`);
+                console.log(`Implicit synchronization done for item ${item_number} on replica`);
                 res.send(`Book purchased successfully from replica: ${book.title}`);
             }
         });
@@ -97,6 +108,7 @@ app.post('/order-replica/purchase/:item_number', async (req, res) => {
         res.status(500).send('Error processing purchase on replica');
     }
 });
+
 
 app.listen(PORT, () => {
     console.log(`Order service running on port ${PORT}`);
