@@ -39,7 +39,7 @@ app.get('/search/:topic', async (req, res) => {
             return res.json(JSON.parse(cachedData));
         }
 
-        // طلب البيانات من خدمة الكتالوج
+    
         const response = await axios.get(`${catalogServers[catalogIndex]}/search/${topic}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
