@@ -77,25 +77,28 @@ app.post('/update/:item_number', async (req, res) => {
 });
 
 // Synchronization endpoint for replicas
+// Synchronization endpoint for replicas
 app.post('/sync/:item_number', (req, res) => {
     const { item_number } = req.params;
-    const { stock } = req.body;
 
-    db.run("UPDATE books SET stock = ? WHERE id = ?", [stock, item_number], function(err) {
+    db.run("UPDATE books SET stock = ? WHERE id = ?", [req.body.stock, item_number], function(err) {
         if (err) {
             console.error('Error updating book in synchronization:', err);
             res.status(500).send('Error updating book in synchronization');
         } else {
-            console.log(`Synchronized stock for book with ID ${item_number} to ${stock}`);
-            res.send(`Synchronized successfully for item ${item_number}`);
+            console.log(`Synchronized stock for book with ID ${item_number} to ${req.body.stock}`);
 
             // إبطال البيانات المؤقتة من الذاكرة المؤقتة لضمان التوافق
+            console.log(`Invalidating cache for item ${item_number} after synchronization`);
             axios.post(`http://frontend-service/invalidate-cache/${item_number}`)
                 .then(() => console.log(`Cache invalidated for item ${item_number}`))
                 .catch(err => console.error(`Error invalidating cache for item ${item_number}:`, err.message));
+
+            res.send(`Synchronized successfully for item ${item_number}`);
         }
     });
 });
+
 
 app.listen(PORT, () => {
     console.log(`Catalog service running on port ${PORT}`);

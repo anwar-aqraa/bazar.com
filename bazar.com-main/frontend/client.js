@@ -86,9 +86,11 @@ app.post('/purchase/:item_number', async (req, res) => {
         orderIndex = (orderIndex + 1) % orderServers.length;
 
         // Invalidate cache to ensure consistency
+        console.log(`Invalidating cache for item: ${item_number}`);
         await client.del(item_number);
 
         // Send updates to all replicas
+        console.log(`Sending synchronization requests to all replicas for item: ${item_number}`);
         await Promise.all(orderServers.map(server => axios.post(`${server}/sync/${item_number}`)));
 
         console.log(`Purchase processed and synchronized for item: ${item_number}`);
@@ -98,7 +100,6 @@ app.post('/purchase/:item_number', async (req, res) => {
         res.status(500).send('Error processing purchase');
     }
 });
-
 
 app.listen(PORT, () => {
     console.log(`Frontend service running on port ${PORT}`);
