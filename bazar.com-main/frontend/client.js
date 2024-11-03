@@ -21,7 +21,7 @@ client.del = util.promisify(client.del);
 // Middleware to parse JSON requests
 app.use(express.json());
 
-// خوارزمية توزيع الأحمال (Round-Robin)
+
 let catalogIndex = 0;
 let orderIndex = 0;
 const catalogServers = ["http://catalog-server1:3001", "http://catalog-server2:3001"];
@@ -32,7 +32,7 @@ app.get('/search/:topic', async (req, res) => {
     const { topic } = req.params;
     
     try {
-        // التحقق من الذاكرة المؤقتة
+      
         const cachedData = await client.get(topic);
         if (cachedData) {
             console.log('Retrieved from cache');
