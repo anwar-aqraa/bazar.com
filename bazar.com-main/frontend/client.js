@@ -43,7 +43,7 @@ app.get('/search/:topic', async (req, res) => {
         const response = await axios.get(`${catalogServers[catalogIndex]}/search/${topic}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
-        // طباعة أن البيانات جاءت من قاعدة البيانات
+        
         console.log('Retrieved from database');
         
         // تخزين البيانات في الذاكرة المؤقتة
