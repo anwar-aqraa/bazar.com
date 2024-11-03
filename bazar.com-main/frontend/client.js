@@ -7,7 +7,7 @@ const util = require("util");
 const app = express();
 const PORT = 3000; // منفذ واجهة المستخدم
 
-// إعداد Redis كذاكرة مؤقتة مع سياسة استبدال LRU
+
 const client = redis.createClient({
     host: "redis",
     port: 6379,
