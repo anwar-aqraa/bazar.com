@@ -77,6 +77,7 @@ app.get('/info/:item_number', async (req, res) => {
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching info for item number "${item_number}":`, error.message);
+        
         res.status(500).send('Error fetching item info');
     }
 });
