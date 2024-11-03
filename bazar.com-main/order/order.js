@@ -32,7 +32,7 @@ app.post('/purchase/:item_number', async (req, res) => {
 
         const updatedStock = book.stock - 1;
 
-        // إبطال التخزين المؤقت
+       
         await axios.post(`http://catalog-server:3001/invalidate-cache/${item_number}`);
         await axios.post(`http://catalog-server:3001/update/${item_number}`, { stock: updatedStock });
 
