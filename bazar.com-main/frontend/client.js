@@ -12,7 +12,7 @@ const client = redis.createClient({
     host: "redis",
     port: 6379,
     maxmemory: "100mb", // حدد حجم الذاكرة القصوى للتخزين المؤقت
-    maxmemory_policy: "allkeys-lru" // تطبيق سياسة LRU لاستبدال البيانات
+    maxmemory_policy: "allkeys-lru" 
 });
 client.get = util.promisify(client.get);
 client.set = util.promisify(client.set);
