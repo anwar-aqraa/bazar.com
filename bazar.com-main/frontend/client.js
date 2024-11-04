@@ -1,18 +1,19 @@
-// Frontend Server - client.js
-
 const express = require('express');
 const axios = require('axios');
 const redis = require('redis');
 const util = require("util");
 const app = express();
-const PORT = 3000; // منفذ واجهة المستخدم
+const PORT = 3000; // Frontend service port
 
+// Redis setup
 const client = redis.createClient({
     host: "redis",
     port: 6379,
-    maxmemory: "100mb", // حدد حجم الذاكرة القصوى للتخزين المؤقت
-    maxmemory_policy: "allkeys-lru" 
+    maxmemory: "100mb", // Cache size limit
+    maxmemory_policy: "allkeys-lru" // Cache replacement policy
 });
+
+// Promisify Redis methods
 client.get = util.promisify(client.get);
 client.set = util.promisify(client.set);
 client.del = util.promisify(client.del);
@@ -21,29 +22,52 @@ client.del = util.promisify(client.del);
 app.use(express.json());
 
 let catalogIndex = 0;
-let orderIndex = 0;
-const catalogServers = ["http://catalog-server1:3001", "http://catalog-server-replica:3009"]; // تعديل هنا
-const orderServers = ["http://order-server1:3002", "http://order-server-replica:3008"];
+const catalogServers = ["http://catalog-server:3001", "http://catalog-server-replica:3009"];
 
+let orderIndex = 0;
+const orderServers = ["http://order-server:3002", "http://order-server-replica:3008"];
+
+// Error handling for Redis
+client.on("error", (err) => {
+    console.error("Redis error:", err);
+});
+
+// Log Redis connection status
+client.on("connect", () => {
+    console.log("Connected to Redis...");
+});
 
 // Search books by topic
 app.get('/search/:topic', async (req, res) => {
     const { topic } = req.params;
-    
+    const start = Date.now();
+
     try {
+        // Try to retrieve data from Redis cache
         const cachedData = await client.get(topic);
         if (cachedData) {
-            console.log('Retrieved from cache');
+            console.log(`Retrieved from cache: ${topic}`);
             return res.json(JSON.parse(cachedData));
         }
 
+        // Fetch data from catalog server
         const response = await axios.get(`${catalogServers[catalogIndex]}/search/${topic}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
-        console.log('Retrieved from database');
-        
-        // تخزين البيانات في الذاكرة المؤقتة
-        await client.set(topic, JSON.stringify(response.data), 'EX', 300); // Expiration 5 minutes
+        console.log(`Retrieved from database: ${topic}`);
+
+        // Store data in Redis cache with expiration
+        const result = await client.set(topic, JSON.stringify(response.data), 'EX', 300); // Expiration 5 mins
+
+        if (result === 'OK') {
+            console.log(`Data for topic ${topic} successfully stored in Redis`);
+        } else {
+            console.error(`Failed to store data for topic ${topic} in Redis`);
+        }
+
+        const duration = Date.now() - start;
+        console.log(`Response time for /search/${topic}: ${duration}ms`);
+
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching search results for topic "${topic}":`, error.message);
@@ -51,24 +75,33 @@ app.get('/search/:topic', async (req, res) => {
     }
 });
 
+// Fetch book info by item number
 app.get('/info/:item_number', async (req, res) => {
     const { item_number } = req.params;
+    const start = Date.now();
     
     try {
         const cachedData = await client.get(item_number);
         if (cachedData) {
-            console.log('Retrieved from cache');
+            console.log(`Retrieved from cache: item ${item_number}`);
             return res.json(JSON.parse(cachedData));
         }
 
-        // طلب البيانات من خدمة الكتالوج
         const response = await axios.get(`${catalogServers[catalogIndex]}/info/${item_number}`);
         catalogIndex = (catalogIndex + 1) % catalogServers.length;
 
-        // طباعة أن البيانات جاءت من قاعدة البيانات
-        console.log('Retrieved from database');
-        
-        await client.set(item_number, JSON.stringify(response.data), 'EX', 300);
+        console.log(`Retrieved from database: item ${item_number}`);
+
+        const result = await client.set(item_number, JSON.stringify(response.data), 'EX', 300);
+        if (result === 'OK') {
+            console.log(`Data for item ${item_number} successfully stored in Redis`);
+        } else {
+            console.error(`Failed to store data for item ${item_number} in Redis`);
+        }
+
+        const duration = Date.now() - start;
+        console.log(`Response time for /info/${item_number}: ${duration}ms`);
+
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching info for item number "${item_number}":`, error.message);
@@ -76,25 +109,35 @@ app.get('/info/:item_number', async (req, res) => {
     }
 });
 
-// Purchase a book with synchronization
+// Invalidate cache for item number
+app.post('/invalidate-cache/:item_number', async (req, res) => {
+    const { item_number } = req.params;
+    try {
+        await client.del(item_number);
+        console.log(`Cache invalidated for item ${item_number}`);
+        res.status(200).send(`Cache invalidated for item ${item_number}`);
+    } catch (error) {
+        console.error(`Error invalidating cache for item ${item_number}:`, error.message);
+        res.status(500).send('Error invalidating cache');
+    }
+});
+
+// Purchase a book and synchronize the cache
 app.post('/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
     try {
-        // Choose the order server based on Round-Robin
         const response = await axios.post(`${orderServers[orderIndex]}/purchase/${item_number}`);
-       
         orderIndex = (orderIndex + 1) % orderServers.length;
 
-        // Invalidate cache to ensure consistency
+        // Invalidate cache
         console.log(`Invalidating cache for item: ${item_number}`);
         await client.del(item_number);
 
-        // Send updates to all replicas
-        console.log(`Sending synchronization requests to all replicas for item: ${item_number}`);
+        // Synchronize with all order server replicas
+        console.log(`Sending synchronization requests for item: ${item_number}`);
         await Promise.all(orderServers.map(server => axios.post(`${server}/sync/${item_number}`)));
 
-        console.log(`Purchase processed and synchronized for item: ${item_number}`);
-        res.json(response.data);
+        res.json({ message: "Purchase completed", data: response.data });
     } catch (error) {
         console.error(`Error processing purchase for item number "${item_number}":`, error.message);
         res.status(500).send('Error processing purchase');

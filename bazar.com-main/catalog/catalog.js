@@ -1,10 +1,8 @@
-// Catalog Server - catalog.js
-
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-const axios = require('axios');
+const { createClient } = require('redis');
 const app = express();
-const PORT = 3001; // منفذ خدمة الكتالوج
+const PORT = 3001; // Catalog service port
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -15,90 +13,85 @@ const db = new sqlite3.Database('./catalog.db');
 // Initialize the database
 db.serialize(() => {
     db.run("CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY, title TEXT, stock INTEGER, price INTEGER, topic TEXT)");
-    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (1, 'How to get a good grade in DOS in 40 minutes a day', 7, 100, 'distributed systems')");
-    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (2, 'RPCs for Noobs', 8, 65, 'distributed systems')");
-    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (3, 'Xen and the Art of Surviving Undergraduate School', 9, 80, 'undergraduate school')");
-    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (4, 'Cooking for the Impatient Undergrad', 10, 35, 'undergraduate school')");
+    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (1, 'How to finish Project 3 on time', 7, 100, 'distributed systems')");
+    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (2, 'Why theory classes are so hard', 8, 65, 'theory')");
+    db.run("INSERT OR IGNORE INTO books (id, title, stock, price, topic) VALUES (3, 'Spring in the Pioneer Valley', 5, 80, 'local history')");
 });
+
+// Redis setup
+const client = createClient({
+    url: 'redis://redis:6379'
+});
+
+// Error handling for Redis
+client.on('error', (err) => console.error('Redis Client Error', err));
+
+// Connect to Redis
+(async () => {
+    await client.connect();
+})();
 
 // Search books by topic
 app.get('/search/:topic', (req, res) => {
     const { topic } = req.params;
+    console.log(`Searching for books on topic: ${topic}`);
     db.all("SELECT id, title FROM books WHERE topic = ?", [topic], (err, rows) => {
         if (err) {
             console.error('Error fetching books:', err);
             res.status(500).send('Error fetching books');
         } else {
-            console.log('Books found:', rows);
             res.json(rows);
         }
     });
 });
 
 // Get book info by item number
-app.get('/info/:item_number', (req, res) => {
+app.get('/info/:item_number', async (req, res) => {
     const { item_number } = req.params;
-    db.get("SELECT title, stock, price, topic FROM books WHERE id = ?", [item_number], (err, row) => {
-        if (err) {
-            console.error('Error fetching book info:', err);
-            res.status(500).send('Error fetching book info');
-        } else {
-            
-            console.log(`Retrieved book info from database: ${row.title}`);
-            res.json(row);
+    console.log(`Fetching info for book ID: ${item_number}`);
+
+    try {
+        const cachedData = await client.get(item_number);
+        if (cachedData) {
+            console.log(`Retrieved from cache: ${item_number}`);
+            return res.json(JSON.parse(cachedData));
         }
-    });
+
+        db.get("SELECT title, stock, price, topic FROM books WHERE id = ?", [item_number], async (err, row) => {
+            if (err) {
+                console.error('Error fetching book info:', err);
+                return res.status(500).send('Error fetching book info');
+            }
+            if (row) {
+                console.log(`Book info retrieved from database: ${JSON.stringify(row)}`);
+                await client.set(item_number, JSON.stringify(row), 'EX', 300); // Cache for 5 minutes
+                return res.json(row);
+            } else {
+                console.log(`No book found with ID: ${item_number}`);
+                res.status(404).send('Book not found');
+            }
+        });
+    } catch (error) {
+        console.error('Error accessing cache:', error);
+        res.status(500).send('Error accessing cache');
+    }
 });
 
 // Update book stock
-app.post('/update/:item_number', async (req, res) => {
+app.post('/update/:item_number', (req, res) => {
     const { item_number } = req.params;
     const { stock } = req.body;
 
     db.run("UPDATE books SET stock = ? WHERE id = ?", [stock, item_number], function(err) {
         if (err) {
-            console.error('Error updating book:', err);
-            res.status(500).send('Error updating book');
+            console.error('Error updating book stock:', err);
+            res.status(500).send('Error updating book stock');
         } else {
-            console.log(`Book with ID ${item_number} updated to stock ${stock}`);
-            res.send(`Book updated successfully. New stock is now ${stock}`);
-
-            // إرسال طلب تزامن لجميع النسخ المكررة لضمان توافق البيانات
-            const catalogServers = ["http://catalog-server1:3001", "http://catalog-server2:3001"];
-            catalogServers.forEach(server => {
-                if (server !== `http://localhost:${PORT}`) { // تجنب إرسال التحديث لنفس الخادم
-                    axios.post(`${server}/sync/${item_number}`, { stock })
-                        .then(() => console.log(`Synchronized with ${server}`))
-                        .catch(err => console.error(`Error synchronizing with ${server}:`, err.message));
-                }
-            });
+            console.log(`Stock updated successfully for book ${item_number}`);
+            res.send(`Stock updated successfully for book ${item_number}`);
         }
     });
 });
-
-// Synchronization endpoint for replicas
-// Synchronization endpoint for replicas
-app.post('/sync/:item_number', (req, res) => {
-    const { item_number } = req.params;
-
-    db.run("UPDATE books SET stock = ? WHERE id = ?", [req.body.stock, item_number], function(err) {
-        if (err) {
-            console.error('Error updating book in synchronization:', err);
-            res.status(500).send('Error updating book in synchronization');
-        } else {
-            console.log(`Synchronized stock for book with ID ${item_number} to ${req.body.stock}`);
-
-            // إبطال البيانات المؤقتة من الذاكرة المؤقتة لضمان التوافق
-            console.log(`Invalidating cache for item ${item_number} after synchronization`);
-            axios.post(`http://frontend-service/invalidate-cache/${item_number}`)
-                .then(() => console.log(`Cache invalidated for item ${item_number}`))
-                .catch(err => console.error(`Error invalidating cache for item ${item_number}:`, err.message));
-
-            res.send(`Synchronized successfully for item ${item_number}`);
-        }
-    });
-});
-
 
 app.listen(PORT, () => {
     console.log(`Catalog service running on port ${PORT}`);

@@ -1,11 +1,17 @@
+// order/order.js
+
 const express = require('express');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
-const PORT = 3002; // منفذ خدمة الطلب
+const PORT = 3002; // Order service port
 
 // Middleware to parse JSON requests
 app.use(express.json());
+
+// SQLite setup
+
+
 
 // SQLite setup
 const db = new sqlite3.Database('./orders.db', (err) => {
@@ -16,99 +22,75 @@ const db = new sqlite3.Database('./orders.db', (err) => {
     }
 });
 
-// Purchase endpoint
+// Initialize the database
+db.serialize(() => {
+    db.run("CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, book_id INTEGER, status TEXT)", (err) => {
+        if (err) {
+            console.error('Error creating orders table:', err.message);
+        }
+    });
+});
+
+// Purchase book
+
 // Purchase endpoint
 app.post('/purchase/:item_number', async (req, res) => {
     const { item_number } = req.params;
 
     try {
+        // Check stock from catalog service
         const response = await axios.get(`http://catalog-server:3001/info/${item_number}`);
         const book = response.data;
 
-        if (!book || typeof book.stock === 'undefined' || book.stock <= 0) {
-            return res.status(404).send('Book not available or out of stock');
+        // Log the book details received from the catalog
+        console.log('Book details:', book);
+
+        // If the book doesn't exist or has no stock info
+        if (!book || typeof book.stock === 'undefined') {
+            return res.status(404).send('Book not found!'); // Handle book not found case
         }
 
-        const updatedStock = book.stock - 1;
+        // If the book is in stock
+        if (book.stock > 0) {
+            // Update stock in the catalog
+            const updatedStock = book.stock - 1;
+            const updateResponse = await axios.post(`http://catalog-server:3001/update/${item_number}`, {
+                stock: updatedStock,
+                price: book.price
+            });
 
-        // Invalidate cache
-        await axios.post(`http://catalog-server:3001/invalidate-cache/${item_number}`);
-        console.log(`Cache invalidated for item ${item_number}`);
+            // Log the response from the catalog update
+            console.log('Catalog update response:', updateResponse.data);
 
-        // Update the stock in the catalog server
-        await axios.post(`http://catalog-server:3001/update/${item_number}`, { stock: updatedStock });
-
-        // Log the order in the database
-        db.run("INSERT INTO orders (book_id, status) VALUES (?, ?)", [item_number, 'completed'], function (err) {
-            if (err) {
-                console.error('Error logging the order:', err.message);
-                return res.status(500).send('Error logging the order');
-            } else {
-                console.log(`Order processed successfully for item ${item_number}. Stock updated to ${updatedStock}`);
-                // Implicit synchronization
-                axios.post(`http://order-server-replica:3008/sync/${item_number}`);
-                console.log(`Implicit synchronization done for item ${item_number}`);
-                res.send(`Book purchased successfully: ${book.title}`);
-            }
-        });
+            // Log the order in the database
+            db.run("INSERT INTO orders (book_id, status) VALUES (?, ?)", [item_number, 'completed'], function (err) {
+                if (err) {
+                    console.error('Error logging the order:', err.message);
+                    return res.status(500).send('Error logging the order');
+                } else {
+                    return res.send(`Book purchased successfully: ${book.title}`);
+                }
+            });
+        } else {
+            // If the book is out of stock
+            console.log(`Purchase failed: Book "${book.title}" is out of stock.`);
+            return res.send(`Purchase failed: Book "${book.title}" is out of stock!`);
+        }
     } catch (error) {
+        // Log detailed error information
         console.error('Error during purchase:', error.message);
-        res.status(500).send('Error processing purchase');
+        console.error('Error details:', error.response ? error.response.data : 'No response from catalog service');
+        return res.status(500).send('Error processing purchase');
     }
 });
 
-// Synchronization endpoint for replicas
-// Synchronization endpoint for replicas
-app.post('/sync/:item_number', (req, res) => {
-    const { item_number } = req.params;
 
-    // Implement any internal logic needed to sync replicas here
-    console.log(`Synchronization request received for item: ${item_number}`);
-    // Message for successful synchronization
-    console.log(`Synchronized successfully for item ${item_number}`);
+// Synchronize with replicas
+app.post('/sync/:item_number', (req, res) => {
+    const { item_number } = req.params; // Added to avoid undefined error
+    // Logic to synchronize orders (optional)
     res.send(`Synchronized successfully for item ${item_number}`);
 });
-
-
-// New purchase endpoint for order-replica
-// New purchase endpoint for order-replica
-app.post('/order-replica/purchase/:item_number', async (req, res) => {
-    const { item_number } = req.params;
-
-    try {
-        // Invalidate cache for the item being purchased
-        await axios.post(`http://catalog-server:3001/invalidate-cache/${item_number}`);
-        console.log(`Cache invalidated for item ${item_number} on order-replica`);
-
-        const response = await axios.get(`http://catalog-server:3001/info/${item_number}`);
-        const book = response.data;
-
-        if (!book || typeof book.stock === 'undefined' || book.stock <= 0) {
-            return res.status(404).send('Book not available or out of stock');
-        }
-
-        const updatedStock = book.stock - 1;
-
-        await axios.post(`http://catalog-server:3001/update/${item_number}`, { stock: updatedStock });
-
-        db.run("INSERT INTO orders (book_id, status) VALUES (?, ?)", [item_number, 'completed'], function (err) {
-            if (err) {
-                console.error('Error logging the order:', err.message);
-                return res.status(500).send('Error logging the order');
-            } else {
-                console.log(`Order processed successfully for item ${item_number} on order-replica. Stock updated to ${updatedStock}`);
-                // Implicit synchronization
-                axios.post(`http://catalog-server:3001/sync/${item_number}`);
-                console.log(`Implicit synchronization done for item ${item_number} on replica`);
-                res.send(`Book purchased successfully from replica: ${book.title}`);
-            }
-        });
-    } catch (error) {
-        console.error('Error during purchase on replica:', error.message);
-        res.status(500).send('Error processing purchase on replica');
-    }
-});
-
 
 app.listen(PORT, () => {
     console.log(`Order service running on port ${PORT}`);
