@@ -2,7 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const { createClient } = require('redis');
 const app = express();
-const PORT = 3001; // Catalog service port
+const PORT = 3001;
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -19,9 +19,7 @@ db.serialize(() => {
 });
 
 // Redis setup
-const client = createClient({
-    url: 'redis://redis:6379'
-});
+const client = createClient({ url: 'redis://redis:6379' });
 
 // Error handling for Redis
 client.on('error', (err) => console.error('Redis Client Error', err));
@@ -34,10 +32,8 @@ client.on('error', (err) => console.error('Redis Client Error', err));
 // Search books by topic
 app.get('/search/:topic', (req, res) => {
     const { topic } = req.params;
-    console.log(`Searching for books on topic: ${topic}`);
     db.all("SELECT id, title FROM books WHERE topic = ?", [topic], (err, rows) => {
         if (err) {
-            console.error('Error fetching books:', err);
             res.status(500).send('Error fetching books');
         } else {
             res.json(rows);
@@ -48,31 +44,23 @@ app.get('/search/:topic', (req, res) => {
 // Get book info by item number
 app.get('/info/:item_number', async (req, res) => {
     const { item_number } = req.params;
-    console.log(`Fetching info for book ID: ${item_number}`);
-
     try {
         const cachedData = await client.get(item_number);
         if (cachedData) {
-            console.log(`Retrieved from cache: ${item_number}`);
             return res.json(JSON.parse(cachedData));
         }
-
         db.get("SELECT title, stock, price, topic FROM books WHERE id = ?", [item_number], async (err, row) => {
             if (err) {
-                console.error('Error fetching book info:', err);
                 return res.status(500).send('Error fetching book info');
             }
             if (row) {
-                console.log(`Book info retrieved from database: ${JSON.stringify(row)}`);
                 await client.set(item_number, JSON.stringify(row), 'EX', 300); // Cache for 5 minutes
                 return res.json(row);
             } else {
-                console.log(`No book found with ID: ${item_number}`);
                 res.status(404).send('Book not found');
             }
         });
     } catch (error) {
-        console.error('Error accessing cache:', error);
         res.status(500).send('Error accessing cache');
     }
 });
@@ -81,13 +69,11 @@ app.get('/info/:item_number', async (req, res) => {
 app.post('/update/:item_number', (req, res) => {
     const { item_number } = req.params;
     const { stock } = req.body;
-
-    db.run("UPDATE books SET stock = ? WHERE id = ?", [stock, item_number], function(err) {
+    db.run("UPDATE books SET stock = ? WHERE id = ?", [stock, item_number], function (err) {
         if (err) {
-            console.error('Error updating book stock:', err);
             res.status(500).send('Error updating book stock');
         } else {
-            console.log(`Stock updated successfully for book ${item_number}`);
+            client.del(item_number); // Invalidate the cache
             res.send(`Stock updated successfully for book ${item_number}`);
         }
     });
