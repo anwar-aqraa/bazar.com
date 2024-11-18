@@ -2,7 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
-const PORT = 3002; // Order service port
+const PORT = 3004; // Order service port
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -21,13 +21,13 @@ app.post('/purchase/:item_number', async (req, res) => {
 
     try {
         // Check stock from catalog service
-        const response = await axios.get(`http://catalog-server:3001/info/${item_number}`);
+        const response = await axios.get(`http://catalog-server:3003/info/${item_number}`);
         const book = response.data;
 
         if (book.stock > 0) {
             db.run("INSERT INTO orders (book_id, status) VALUES (?, ?)", [item_number, 'purchased']);
             // Decrease stock in the catalog server (primary)
-            await axios.post(`http://catalog-server:3001/update/${item_number}`, { stock: book.stock - 1 });
+            await axios.post(`http://catalog-server:3003/update/${item_number}`, { stock: book.stock - 1 });
             res.send('Purchase successful');
         } else {
             res.status(400).send('Out of stock');
