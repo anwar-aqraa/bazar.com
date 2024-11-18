@@ -1,58 +1,117 @@
 version: '3.8'
 
 services:
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-
   catalog-server:
     image: catalog-service
     build:
       context: .
+      dockerfile: Dockerfile
+      target: catalog
+    volumes:
+      - ./catalog:/app/catalog:ro
+      - ./nginx:/app/nginx:ro
+      - ./catalog/database.db:/app/database.db:rw
+    environment:
+      - NODE_ENV=production
+    deploy:
+      replicas: 1  # Default primary instance
+      update_config:
+        delay: 10s
+      endpoint_mode: dnsrr
     ports:
       - "3001:3001"
-    networks:
-      - app-network
 
-  catalog-server-replica:
+
+  catalog-replica:
     image: catalog-service
     build:
       context: .
+      dockerfile: Dockerfile
+      target: catalog
+    environment:
+      - NODE_ENV=production
+    deploy:
+      replicas: 1
+      update_config:
+        delay: 10s
     ports:
-      - "3009:3001"
-    networks:
-      - app-network
+      - "3003:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      retries: 3
+      start_period: 10s
+      timeout: 10s
+
 
   order-server:
     image: order-service
     build:
       context: .
+      dockerfile: Dockerfile
+      target: order
+    volumes:
+      - ./order:/app/order:ro
+      - ./nginx:/app/nginx:ro
+    environment:
+      - NODE_ENV=production
+    deploy:
+      replicas: 1  # Default primary instance
+      update_config:
+        delay: 10s
+      endpoint_mode: dnsrr
+    depends_on:
+      - catalog-server
     ports:
       - "3002:3002"
-    networks:
-      - app-network
 
-  order-server-replica:
+  order-replica:
     image: order-service
     build:
       context: .
+      dockerfile: Dockerfile
+      target: order
+    volumes:
+      - ./order:/app/order:ro
+      - ./nginx:/app/nginx:ro
+    environment:
+      - NODE_ENV=production
+    deploy:
+      replicas: 1  # Single replica instance
+      update_config:
+        delay: 10s
+      endpoint_mode: dnsrr
     ports:
-      - "3008:3002"
-    networks:
-      - app-network
+      - "3004:3002"  # Expose replica on different port
 
-  frontend:
-    image: frontend-service
+  client:
+    image: client-service
     build:
       context: .
+      dockerfile: Dockerfile
+      target: client
+    volumes:
+      - ./frontend:/app/frontend:ro
+    deploy:
+      replicas: 1
+      update_config:
+        delay: 10s
+      endpoint_mode: dnsrr
+    depends_on:
+      - catalog-server
+      - order-server
     ports:
       - "3000:3000"
-    networks:
-      - app-network
 
-networks:
-  app-network:
-    driver: bridge
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - catalog-server
+      - catalog-replica
+      - order-server
+      - order-replica
+      - client
