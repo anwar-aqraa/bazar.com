@@ -21,28 +21,25 @@ services:
     ports:
       - "3001:3001"
 
-
   catalog-replica:
     image: catalog-service
     build:
       context: .
       dockerfile: Dockerfile
       target: catalog
+    volumes:
+      - ./catalog:/app/catalog:ro
+      - ./nginx:/app/nginx:ro
+      - ./catalog/database-replica.db:/app/database.db:rw  # Separate database for replica
     environment:
       - NODE_ENV=production
     deploy:
-      replicas: 1
+      replicas: 1  # Single replica instance
       update_config:
         delay: 10s
+      endpoint_mode: dnsrr
     ports:
-      - "3003:3001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 30s
-      retries: 3
-      start_period: 10s
-      timeout: 10s
-
+      - "3003:3001"  # Expose replica on different port
 
   order-server:
     image: order-service
